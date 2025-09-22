@@ -42,7 +42,7 @@ dependencies = [
     "click-loglevel ~= 0.5",
     "colorlog ~= 6.0",
     "httpx ~= 0.22",
-    "torf >= 4.2.2, < 5.0",
+    "torf @ git+https://github.com/mhdzumair/torf.git",
     "yarl ~= 1.7",
 ]
 
@@ -55,6 +55,9 @@ demagnetize = "demagnetize.__main__:main"
 
 [tool.hatch.version]
 path = "src/demagnetize/__init__.py"
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.hatch.build.targets.sdist]
 include = [

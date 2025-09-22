@@ -6,7 +6,6 @@ from anyio import CapacityLimiter
 import attr
 import click
 from torf import Magnet, Torrent
-from torf._utils import decode_dict  # type: ignore[attr-defined]
 from .consts import CLIENT, MAGNET_LIMIT
 from .errors import DemagnetizeError
 from .session import TorrentSession
@@ -69,8 +68,53 @@ class Demagnetizer:
 
 def compose_torrent(magnet: Magnet, info: dict) -> Torrent:
     torrent = Torrent()
-    torrent.metainfo["info"] = decode_dict(info)
+    
+    # Convert byte keys to string keys for torf compatibility
+    # torf expects string keys, but info dicts from peers use byte keys
+    string_key_info = convert_byte_keys_to_strings(info)
+    
+    # Log the piece length for debugging
+    piece_length = string_key_info.get("piece length")
+    if piece_length and piece_length % 16384 != 0:
+        log.info("Using non-standard piece length: %d (not divisible by 16384)", piece_length)
+    
+    torrent.metainfo["info"] = string_key_info
     torrent.trackers = magnet.tr  # type: ignore[assignment]
     torrent.created_by = CLIENT
     torrent.creation_date = datetime.now(tz=timezone.utc)
     return torrent
+
+
+def convert_byte_keys_to_strings(info: dict) -> dict:
+    """
+    Convert byte keys to string keys for torf compatibility.
+    
+    Info dicts from peers use byte keys, but torf expects string keys.
+    This function recursively converts byte keys to strings.
+    """
+    converted = {}
+    for key, value in info.items():
+        # Convert byte keys to string keys
+        if isinstance(key, bytes):
+            try:
+                string_key = key.decode('utf-8')
+            except UnicodeDecodeError:
+                # If decoding fails, keep as bytes (shouldn't happen for standard keys)
+                string_key = key
+        else:
+            string_key = key
+            
+        # Handle nested dictionaries and lists
+        if isinstance(value, dict):
+            converted[string_key] = convert_byte_keys_to_strings(value)
+        elif isinstance(value, list):
+            converted[string_key] = [
+                convert_byte_keys_to_strings(item) if isinstance(item, dict) else item
+                for item in value
+            ]
+        else:
+            converted[string_key] = value
+            
+    return converted
+
+
